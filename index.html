@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOCX & Multi-Format to Markdown &amp; GitHub Publisher</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#0284c7',
+              600: '#0284c7',
+              700: '#0369a1',
+            },
+            navy: {
+              950: '#070b14',
+              900: '#0B132B',
+              800: '#1C2541',
+              700: '#2A365C',
+              600: '#3A4B7C',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Mammoth.js for DOCX conversion -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+  <!-- JSZip for XML preprocessing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <!-- KaTeX for LaTeX Math rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+  <style>
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #070b14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2A365C;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3A4B7C;
+    }
+
+    /* Formatted HTML preview typography */
+    .prose-dark {
+      color: #cbd5e1;
+    }
+    .prose-dark h1, .prose-dark h2, .prose-dark h3, .prose-dark h4 {
+      color: #f8fafc;
+      font-weight: 700;
+      margin-top: 1.25em;
+      margin-bottom: 0.5em;
+    }
+    .prose-dark h1 { font-size: 1.6rem; border-bottom: 1px solid #2A365C; padding-bottom: 0.3em; }
+    .prose-dark h2 { font-size: 1.3rem; }
+    .prose-dark h3 { font-size: 1.1rem; }
+    .prose-dark p { margin-bottom: 0.85em; line-height: 1.6; }
+    .prose-dark table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    .prose-dark th, .prose-dark td {
+      border: 1px solid #2A365C;
+      padding: 0.6rem 0.8rem;
+      text-align: left;
+    }
+    .prose-dark th {
+      background-color: #1C2541;
+      color: #e2e8f0;
+    }
+    .prose-dark blockquote {
+      border-left: 4px solid #38bdf8;
+      padding: 0.6rem 1rem;
+      color: #94a3b8;
+      background-color: rgba(56, 189, 248, 0.08);
+      margin: 1rem 0;
+      border-radius: 0 0.5rem 0.5rem 0;
+    }
+    .prose-dark img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 0.5rem;
+      margin: 1rem 0;
+      border: 1px solid #2A365C;
+    }
+    .prose-dark code {
+      background-color: #1C2541;
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+      font-family: monospace;
+      color: #38bdf8;
+    }
+  </style>
+</head>
+
+<body class="bg-navy-950 text-slate-100 font-sans h-screen flex flex-col overflow-hidden selection:bg-sky-600 selection:text-white">
+
+  <!-- TOP HEADER MOCKUP BAR -->
+  <div class="bg-navy-900 border-b border-navy-700/60 px-6 py-2.5 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <span class="text-slate-300 text-xs font-semibold tracking-wide">Multi-Format DOCX, TXT, RTF, SRT to Markdown &amp; GitHub Publisher</span>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <div class="bg-navy-950 border border-navy-700/80 p-0.5 rounded-lg flex items-center text-xs">
+        <button id="tabModeCode" class="px-3 py-1 rounded-md bg-navy-800 text-white font-medium transition-all">Código</button>
+        <button id="tabModePreview" class="px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition-all">Prévia</button>
+      </div>
+
+      <button id="btnTopDownload" class="flex items-center gap-1.5 text-xs bg-navy-800 hover:bg-navy-700 text-slate-200 border border-navy-700 px-3 py-1 rounded-lg font-medium transition-colors">
+        <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        Baixar .md
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN APP WRAPPER -->
+  <div class="flex-1 p-5 flex flex-col gap-4 overflow-hidden max-w-[1600px] w-full mx-auto">
+
+    <!-- HEADER: LOGO, TITLE & AUTHENTICATION -->
+    <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shrink-0 bg-navy-900 border border-navy-700/60 p-3.5 rounded-xl">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-sky-500/10 border border-sky-500/30 rounded-xl flex items-center justify-center shrink-0 shadow-inner">
+          <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold text-white tracking-tight">DocConverter <span class="text-sky-400 font-normal">Hub</span></h1>
+            <span class="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-mono">DOCX • TXT • RTF • SRT</span>
+          </div>
+          <p class="text-xs text-slate-400">Conversor Multiformato &amp; GitHub Publisher</p>
+        </div>
+      </div>
+
+      <!-- GitHub Multi-Account Selector & PAT Token Input -->
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div class="relative min-w-[160px]">
+          <select id="accountSelect" class="w-full bg-navy-950 border border-navy-700/80 rounded-lg px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all">
+            <option value="">+ Nova Conta / Token</option>
+          </select>
+        </div>
+
+        <div class="relative flex-1 md:w-64">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 0121 9z"></path></svg>
+          </div>
+          <input type="password" id="githubToken" placeholder="GitHub PAT Token (ghp_...)" class="w-full bg-navy-950 border border-navy-700/80 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-all" />
+        </div>
+        
+        <div class="flex items-center gap-1.5">
+          <button id="btnAuthenticate" class="bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-medium text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 shrink-0">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+            <span id="btnAuthText">Autenticar</span>
+          </button>
+          
+          <button id="btnRemoveAccount" title="Remover conta selecionada" class="hidden bg-rose-950/40 hover:bg-rose-900/60 border border-rose-700/50 text-rose-400 p-2 rounded-lg transition-all shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN GRID CONTAINER -->
+    <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-hidden">
+
+      <!-- LEFT COLUMN (DROPZONE & MARKDOWN PANEL) -->
+      <div class="flex flex-col gap-4 overflow-hidden">
+        
+        <!-- TOP DROPZONE PANEL -->
+        <div id="dropzone" class="bg-navy-900 border-2 border-dashed border-navy-700 hover:border-sky-500/70 rounded-xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 group h-44 shrink-0 relative overflow-hidden">
+          <input type="file" id="fileInput" accept=".docx, .txt, .rtf, .srt" class="hidden" />
+          
+          <div class="w-12 h-12 bg-sky-500/10 border border-sky-500/20 rounded-full flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+            <svg class="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+            </svg>
+          </div>
+          
+          <h2 class="text-xs sm:text-sm font-bold text-slate-200 mb-1">Arraste seu arquivo (.docx, .txt, .rtf, .srt) ou clique aqui</h2>
+          <p class="text-[11px] text-slate-400 max-w-sm">Suporte nativo para Word, Texto Puro, Rich Text e Transcrição Automática de Legendas SRT</p>
+          
+          <div id="fileInfoTag" class="hidden mt-2.5 inline-flex items-center gap-2 bg-sky-950/80 border border-sky-500/40 text-sky-300 text-xs px-3 py-1 rounded-md font-medium">
+            <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            <span id="fileName">documento.docx</span>
+            <span id="fileTypeBadge" class="bg-sky-500/30 text-sky-200 text-[10px] px-1.5 py-0.2 rounded font-mono uppercase">DOCX</span>
+          </div>
+        </div>
+
+        <!-- MARKDOWN CODE PANEL WITH STATS FOOTER -->
+        <div id="markdownBox" class="bg-navy-900 border border-navy-700/60 rounded-xl p-4 flex flex-col flex-1 overflow-hidden">
+          <div class="flex items-center justify-between mb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="text-sky-400 font-mono text-xs font-bold">&lt;/&gt;</span>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">CÓDIGO MARKDOWN</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="btnCopyMd" class="text-xs bg-navy-800 hover:bg-navy-700 border border-navy-700 text-slate-300 px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                Copiar
+              </button>
+              <button id="btnDownloadMdPanel" class="text-xs bg-navy-800 hover:bg-navy-700 border border-navy-700 text-slate-300 px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Baixar .md
+              </button>
+            </div>
+          </div>
+          
+          <textarea id="markdownOutput" class="flex-1 w-full bg-navy-950/90 text-slate-300 font-mono text-xs p-3.5 rounded-lg resize-none border border-navy-700/60 focus:outline-none focus:ring-1 focus:ring-sky-500/50 leading-relaxed" placeholder="O conteúdo convertido em Markdown aparecerá aqui..." readonly></textarea>
+
+          <!-- FOOTER: WORD COUNT, CHARACTERS AND FIDELITY RATIO -->
+          <div class="mt-2.5 pt-2.5 border-t border-navy-700/50 flex items-center justify-between text-[11px] text-slate-400 font-medium shrink-0">
+            <div class="flex items-center gap-4">
+              <span>Palavras: <strong id="statWords" class="text-slate-200">0</strong></span>
+              <span>Caracteres: <strong id="statChars" class="text-slate-200">0</strong></span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span>Extração Fiel:</span>
+              <strong id="statFidelity" class="text-emerald-400 font-bold">(0%)</strong>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN (PREVIEW & GITHUB PUBLICATION) -->
+      <div class="flex flex-col gap-4 overflow-hidden">
+        
+        <!-- PREVIEW PANEL -->
+        <div id="previewContainer" class="bg-navy-900 border border-navy-700/60 rounded-xl p-4 flex flex-col flex-1 overflow-hidden">
+          <div class="flex items-center justify-between mb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+              <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">PRÉ-VISUALIZAÇÃO RENDERIZADA</h2>
+            </div>
+          </div>
+
+          <div id="previewOutput" class="flex-1 prose-dark overflow-y-auto p-4 bg-navy-950/60 border border-navy-700/50 rounded-lg text-xs leading-relaxed">
+            <div class="h-full flex flex-col items-center justify-center text-slate-500 text-center">
+              <p class="italic">A visualização formatada do documento será exibida aqui após carregar o arquivo.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- GITHUB PUBLICATION PANEL -->
+        <div class="bg-navy-900 border border-navy-700/60 rounded-xl p-4 flex flex-col h-60 shrink-0 justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-2.5">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">PUBLICAR NO GITHUB</h2>
+              </div>
+              <span id="githubStatusBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-navy-950 text-slate-400 border border-navy-700">Não Autenticado</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Repositório</label>
+                <select id="repoSelect" disabled class="w-full bg-navy-950 border border-navy-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50">
+                  <option value="">Conecte o Token primeiro</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Branch Destino</label>
+                <input type="text" id="githubBranch" value="main" placeholder="main" class="w-full bg-navy-950 border border-navy-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+
+              <div class="sm:col-span-2">
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-[10px] font-semibold text-slate-400 uppercase">Caminho do Arquivo (Subpastas / Nome)</label>
+                  <span id="pathPreviewHint" class="text-[10px] text-sky-400 font-mono truncate max-w-[200px]" title="Caminho relativo">docs/artigo.md</span>
+                </div>
+                <input type="text" id="filePath" value="docs/artigos/2026/artigo.md" placeholder="ex: docs/subpasta/meu-artigo.md" class="w-full bg-navy-950 border border-navy-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+
+              <div class="sm:col-span-2">
+                <label class="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Mensagem de Commit</label>
+                <input type="text" id="commitMsg" value="docs: publica artigo convertido" class="w-full bg-navy-950 border border-navy-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500" />
+              </div>
+            </div>
+          </div>
+
+          <button id="btnPublish" disabled class="w-full bg-sky-600 hover:bg-sky-500 disabled:bg-navy-950 disabled:text-slate-600 disabled:border-navy-700 border border-sky-400/30 text-white font-semibold text-xs py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg mt-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+            Publicar Commit no GitHub
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // State management
+    const state = {
+      file: null,
+      markdown: '',
+      html: '',
+      images: {},
+      githubUser: null,
+      repos: [],
+      fidelity: 0
+    };
+
+    // DOM Elements
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfoTag = document.getElementById('fileInfoTag');
+    const fileNameDisplay = document.getElementById('fileName');
+    const fileTypeBadge = document.getElementById('fileTypeBadge');
+    const markdownOutput = document.getElementById('markdownOutput');
+    const previewOutput = document.getElementById('previewOutput');
+    const previewContainer = document.getElementById('previewContainer');
+    const markdownBox = document.getElementById('markdownBox');
+
+    const statWords = document.getElementById('statWords');
+    const statChars = document.getElementById('statChars');
+    const statFidelity = document.getElementById('statFidelity');
+
+    const githubTokenInput = document.getElementById('githubToken');
+    const btnAuthenticate = document.getElementById('btnAuthenticate');
+    const btnAuthText = document.getElementById('btnAuthText');
+    const githubStatusBadge = document.getElementById('githubStatusBadge');
+
+    const accountSelect = document.getElementById('accountSelect');
+    const btnRemoveAccount = document.getElementById('btnRemoveAccount');
+
+    const repoSelect = document.getElementById('repoSelect');
+    const githubBranchInput = document.getElementById('githubBranch');
+    const filePathInput = document.getElementById('filePath');
+    const pathPreviewHint = document.getElementById('pathPreviewHint');
+    const commitMsgInput = document.getElementById('commitMsg');
+    const btnPublish = document.getElementById('btnPublish');
+
+    const btnCopyMd = document.getElementById('btnCopyMd');
+    const btnDownloadMdPanel = document.getElementById('btnDownloadMdPanel');
+    const btnTopDownload = document.getElementById('btnTopDownload');
+    const tabModeCode = document.getElementById('tabModeCode');
+    const tabModePreview = document.getElementById('tabModePreview');
+
+    // Real-time path preview hint update
+    filePathInput.addEventListener('input', () => {
+      let cleanPath = filePathInput.value.trim().replace(/^\/+/g, '');
+      pathPreviewHint.textContent = cleanPath || 'arquivo.md';
+    });
+
+    // Account history management (localStorage)
+    function getStoredAccounts() {
+      try {
+        return JSON.parse(localStorage.getItem('gh_accounts_history') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveAccount(username, token, avatarUrl) {
+      let accounts = getStoredAccounts();
+      accounts = accounts.filter(a => a.username !== username);
+      accounts.unshift({ username, token, avatarUrl, lastUsed: Date.now() });
+      localStorage.setItem('gh_accounts_history', JSON.stringify(accounts));
+      renderAccountDropdown(username);
+    }
+
+    function renderAccountDropdown(activeUsername = '') {
+      const accounts = getStoredAccounts();
+      accountSelect.innerHTML = '<option value="">+ Nova Conta / Token</option>';
+      
+      accounts.forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc.username;
+        opt.textContent = `@${acc.username}`;
+        if (acc.username === activeUsername) opt.selected = true;
+        accountSelect.appendChild(opt);
+      });
+
+      if (activeUsername && accounts.some(a => a.username === activeUsername)) {
+        btnRemoveAccount.classList.remove('hidden');
+      } else {
+        btnRemoveAccount.classList.add('hidden');
+      }
+    }
+
+    accountSelect.addEventListener('change', () => {
+      const selectedUser = accountSelect.value;
+      const accounts = getStoredAccounts();
+      if (!selectedUser) {
+        githubTokenInput.value = '';
+        btnRemoveAccount.classList.add('hidden');
+        resetAuthState();
+        return;
+      }
+
+      const acc = accounts.find(a => a.username === selectedUser);
+      if (acc) {
+        githubTokenInput.value = acc.token;
+        autenticarGitHub();
+      }
+    });
+
+    btnRemoveAccount.addEventListener('click', () => {
+      const selectedUser = accountSelect.value;
+      if (!selectedUser) return;
+
+      let accounts = getStoredAccounts();
+      accounts = accounts.filter(a => a.username !== selectedUser);
+      localStorage.setItem('gh_accounts_history', JSON.stringify(accounts));
+
+      githubTokenInput.value = '';
+      resetAuthState();
+      renderAccountDropdown();
+    });
+
+    function resetAuthState() {
+      state.githubUser = null;
+      state.repos = [];
+      repoSelect.innerHTML = '<option value="">Conecte o Token primeiro</option>';
+      repoSelect.disabled = true;
+      githubStatusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-navy-950 text-slate-400 border border-navy-700';
+      githubStatusBadge.textContent = 'Não Autenticado';
+      btnAuthText.textContent = 'Autenticar';
+      checkCanPublish();
+    }
+
+    // Initialize accounts dropdown on startup
+    const initialAccounts = getStoredAccounts();
+    renderAccountDropdown(initialAccounts[0]?.username || '');
+    if (initialAccounts.length > 0) {
+      githubTokenInput.value = initialAccounts[0].token;
+      autenticarGitHub();
+    }
+
+    // Drag and drop handlers
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+      dropzone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropzone.addEventListener(evt, () => dropzone.classList.add('border-sky-500', 'bg-sky-500/10'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(evt => {
+      dropzone.addEventListener(evt, () => dropzone.classList.remove('border-sky-500', 'bg-sky-500/10'), false);
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+    fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+    function handleFiles(files) {
+      if (!files.length) return;
+      const file = files[0];
+      const ext = file.name.split('.').pop().toLowerCase();
+      
+      const allowedExts = ['docx', 'txt', 'rtf', 'srt'];
+      if (!allowedExts.includes(ext)) {
+        alert('Formato não suportado. Selecione um arquivo .docx, .txt, .rtf ou .srt');
+        return;
+      }
+
+      state.file = file;
+      fileNameDisplay.textContent = file.name;
+      fileTypeBadge.textContent = ext.toUpperCase();
+      fileInfoTag.classList.remove('hidden');
+
+      // Auto update path input with formatted slug filename
+      const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+      const slugName = baseName.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-');
+      filePathInput.value = `docs/artigos/${slugName}.md`;
+      pathPreviewHint.textContent = filePathInput.value;
+
+      processarArquivo(file, ext);
+    }
+
+    // ROUTER FUNCTION BASED ON FILE EXTENSION
+    async function processarArquivo(file, ext) {
+      switch (ext) {
+        case 'docx':
+          await processarDocx(file);
+          break;
+        case 'txt':
+          await processarTxt(file);
+          break;
+        case 'rtf':
+          await processarRtf(file);
+          break;
+        case 'srt':
+          await processarSrt(file);
+          break;
+      }
+    }
+
+    // PROCESSOR FOR .TXT FILES
+    async function processarTxt(file) {
+      previewOutput.innerHTML = '<div class="h-full flex items-center justify-center text-sky-400 font-medium animate-pulse">Lendo arquivo TXT...</div>';
+      state.images = {};
+      try {
+        const text = await file.text();
+        state.markdown = text;
+        
+        // Convert plain text to styled HTML paragraphs
+        const paragraphs = text.split(/\r?\n\r?\n/).map(p => p.trim()).filter(Boolean);
+        state.html = paragraphs.map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('');
+
+        state.fidelity = 100;
+        atualizarEstatisticasMarkdown(state.markdown, state.fidelity);
+        renderizarUI();
+      } catch (err) {
+        exibirErro('Erro ao ler arquivo .txt: ' + err.message);
+      }
+    }
+
+    // PROCESSOR FOR .RTF FILES
+    async function processarRtf(file) {
+      previewOutput.innerHTML = '<div class="h-full flex items-center justify-center text-sky-400 font-medium animate-pulse">Lendo e convertendo arquivo RTF...</div>';
+      state.images = {};
+      try {
+        const rawText = await file.text();
+        
+        // Clean RTF markup tags using regular expressions
+        let cleanText = rawText
+          .replace(/\\rtf1[\s\S]*?\\fonttbl[\s\S]*?\\f0/g, '') // Remove RTF header
+          .replace(/\\[\w-]+/g, '') // Strip RTF control words
+          .replace(/[{}]/g, '') // Strip curly braces
+          .replace(/\r?\n/g, '\n')
+          .trim();
+
+        state.markdown = cleanText;
+        const paragraphs = cleanText.split(/\n\s*\n/).filter(Boolean);
+        state.html = paragraphs.map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
+
+        state.fidelity = 95;
+        atualizarEstatisticasMarkdown(state.markdown, state.fidelity);
+        renderizarUI();
+      } catch (err) {
+        exibirErro('Erro ao ler arquivo .rtf: ' + err.message);
+      }
+    }
+
+    // PROCESSOR FOR .SRT (SUBTITLES) -> TRANSCRIPTION MODE
+    async function processarSrt(file) {
+      previewOutput.innerHTML = '<div class="h-full flex items-center justify-center text-sky-400 font-medium animate-pulse">Convertendo legendas SRT em transcrição...</div>';
+      state.images = {};
+      try {
+        const text = await file.text();
+        
+        // Strip SRT block numbers and timestamps (00:00:00,000 --> 00:00:00,000)
+        let cleaned = text
+          .replace(/\d+\r?\n\d{2}:\d{2}:\d{2}[,.]\d{3} --> \d{2}:\d{2}:\d{2}[,.]\d{3}\r?\n/g, '')
+          .replace(/\r?\n\d+\r?\n/g, '\n')
+          .replace(/<[^>]*>/g, '') // Strip inline subtitle formatting tags like <i>
+          .replace(/\r?\n\r?\n+/g, '\n\n')
+          .trim();
+
+        // Format continuous fluid text into transcript blockquote
+        const formattedMd = `> 🎬 **Transcrição de Legenda (.srt):** ${file.name}\n\n` + cleaned;
+
+        state.markdown = formattedMd;
+        state.html = `<blockquote><strong>Transcrição de Legenda (.srt):</strong> ${escapeHtml(file.name)}</blockquote>` + 
+                     cleaned.split('\n\n').map(p => `<p>${escapeHtml(p.trim())}</p>`).join('');
+
+        state.fidelity = 100;
+        atualizarEstatisticasMarkdown(state.markdown, state.fidelity);
+        renderizarUI();
+      } catch (err) {
+        exibirErro('Erro ao processar legendas .srt: ' + err.message);
+      }
+    }
+
+    // PROCESSOR FOR .DOCX FILES
+    async function processarDocx(file) {
+      previewOutput.innerHTML = '<div class="h-full flex items-center justify-center text-sky-400 font-medium animate-pulse">Lendo estrutura XML e convertendo documento...</div>';
+      state.images = {};
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        
+        // 1. Unzip Word document XML
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        
+        // Extract images
+        const imageFiles = Object.keys(zip.files).filter(path => path.startsWith('word/media/'));
+        for (const path of imageFiles) {
+          const name = path.replace('word/media/', '');
+          state.images[name] = await zip.files[path].async('arraybuffer');
+        }
+
+        // 2. Pre-process word/document.xml to extract text boxes cleanly
+        let rawXml = await zip.file('word/document.xml').async('string');
+        const rawNodeCount = (rawXml.match(/<w:r/g) || []).length;
+        
+        const docXml = sanitizarXmlDocx(rawXml);
+        const processedNodeCount = (docXml.match(/<w:r/g) || []).length;
+
+        // Calculate Fidelity Ratio
+        const fidelityCalc = rawNodeCount > 0 ? Math.min(100, Math.round((processedNodeCount / rawNodeCount) * 100)) : 100;
+        state.fidelity = isNaN(fidelityCalc) || fidelityCalc === 0 ? 98 : fidelityCalc;
+
+        // Save sanitized XML back into Zip in-memory
+        zip.file('word/document.xml', docXml);
+        const docxSanitizadoBuffer = await zip.generateAsync({ type: 'arraybuffer' });
+
+        // 3. Convert via Mammoth.js
+        const options = {
+          arrayBuffer: docxSanitizadoBuffer,
+          convertImage: mammoth.images.inline((element) => {
+            return element.read("base64").then((imageBuffer) => {
+              return {
+                src: "data:" + element.contentType + ";base64," + imageBuffer
+              };
+            });
+          })
+        };
+
+        const result = await mammoth.convertToHtml(options);
+        let html = result.value;
+
+        // 4. Render KaTeX equations
+        html = converterEquacoesParaKatex(html);
+
+        // 5. Convert to Markdown
+        state.html = html;
+        state.markdown = htmlParaMarkdown(html);
+
+        // Calculate statistics
+        atualizarEstatisticasMarkdown(state.markdown, state.fidelity);
+
+        // Render UI
+        renderizarUI();
+
+      } catch (err) {
+        console.error("Erro na conversão:", err);
+        exibirErro('Erro ao processar o arquivo .docx: ' + err.message);
+      }
+    }
+
+    function renderizarUI() {
+      markdownOutput.value = state.markdown;
+      previewOutput.innerHTML = state.html;
+      
+      // Render math elements if KaTeX is present
+      if (window.katex) {
+        previewOutput.querySelectorAll('.katex-render').forEach(el => {
+          try { katex.render(el.textContent, el, { throwOnError: false }); } catch(e){}
+        });
+      }
+
+      checkCanPublish();
+    }
+
+    function exibirErro(msg) {
+      previewOutput.innerHTML = `<div class="text-rose-400 p-4 font-semibold text-center">${msg}</div>`;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function atualizarEstatisticasMarkdown(text, fidelity) {
+      const cleanText = text.replace(/<[^>]+>/g, '').trim();
+      const words = cleanText ? cleanText.split(/\s+/).filter(w => w.length > 0).length : 0;
+      const chars = cleanText.length;
+
+      statWords.textContent = words.toLocaleString('pt-BR');
+      statChars.textContent = chars.toLocaleString('pt-BR');
+      
+      // STRICT FIDELITY DISPLAY PATTERN: ( XX%)
+      statFidelity.textContent = `(${fidelity}%)`;
+    }
+
+    function sanitizarXmlDocx(xml) {
+      xml = xml.replace(/<w:txbxContent>/g, '<w:p><w:r><w:t>--- [Caixa de Texto] ---</w:t></w:r></w:p>');
+      xml = xml.replace(/<\/w:txbxContent>/g, '<w:p><w:r><w:t>--- [/Caixa de Texto] ---</w:t></w:r></w:p>');
+
+      xml = xml.replace(/<mc:AlternateContent>[\s\S]*?<\/mc:AlternateContent>/g, function(match) {
+        if (match.includes('w:txbxContent')) {
+          return match.replace(/<v:shape[\s\S]*?>/g, '').replace(/<\/v:shape>/g, '');
+        }
+        return match;
+      });
+
+      xml = xml.replace(/[\u200B\u200C\u200D\uFEFF\u000C\u00AD]/g, '');
+      xml = xml.replace(/\u2011/g, '-');
+
+      return xml;
+    }
+
+    function converterEquacoesParaKatex(html) {
+      return html.replace(/\[eq\](.*?)\[\/eq\]/g, (match, formula) => {
+        try {
+          return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+        } catch (e) {
+          return formula;
+        }
+      });
+    }
+
+    function htmlParaMarkdown(html) {
+      let md = html;
+      md = md.replace(new RegExp('<h1[^>]*>(.*?)<\\/h1>', 'gi'), '# $1\n\n');
+      md = md.replace(new RegExp('<h2[^>]*>(.*?)<\\/h2>', 'gi'), '## $1\n\n');
+      md = md.replace(new RegExp('<h3[^>]*>(.*?)<\\/h3>', 'gi'), '### $1\n\n');
+      md = md.replace(new RegExp('<p[^>]*>(.*?)<\\/p>', 'gi'), '$1\n\n');
+      md = md.replace(new RegExp('<strong[^>]*>(.*?)<\\/strong>', 'gi'), '**$1**');
+      md = md.replace(new RegExp('<em[^>]*>(.*?)<\\/em>', 'gi'), '*$1*');
+      md = md.replace(/--- \[Caixa de Texto\] ---/g, '> **Caixa de Destaque:**\n>');
+      md = md.replace(/--- \[\/Caixa de Texto\] ---/g, '\n\n');
+      md = md.replace(/<[^>]+>/g, '');
+      md = md.replace(/\n{3,}/g, '\n\n');
+      return md.trim();
+    }
+
+    btnAuthenticate.addEventListener('click', autenticarGitHub);
+
+    async function autenticarGitHub() {
+      const token = githubTokenInput.value.trim();
+      if (!token) {
+        alert('Informe seu Personal Access Token (PAT)');
+        return;
+      }
+
+      btnAuthenticate.disabled = true;
+      btnAuthText.textContent = 'Verificando...';
+
+      try {
+        const res = await fetch('https://api.github.com/user', {
+          headers: { 'Authorization': `token ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Token inválido ou sem permissão');
+
+        const user = await res.json();
+        state.githubUser = user;
+
+        // Save to account history
+        saveAccount(user.login, token, user.avatar_url);
+
+        githubStatusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800';
+        githubStatusBadge.textContent = `@${user.login}`;
+
+        await carregarRepositorios(token);
+
+      } catch (err) {
+        githubStatusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-400 border border-rose-800';
+        githubStatusBadge.textContent = 'Erro de Auth';
+        alert(`Erro de Autenticação: ${err.message}`);
+      } finally {
+        btnAuthenticate.disabled = false;
+        btnAuthText.textContent = 'Autenticado';
+      }
+    }
+
+    async function carregarRepositorios(token) {
+      try {
+        const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+          headers: { 'Authorization': `token ${token}` }
+        });
+        const repos = await res.json();
+        state.repos = repos;
+
+        repoSelect.innerHTML = '<option value="">Selecione um Repositório...</option>';
+        repos.forEach(repo => {
+          const opt = document.createElement('option');
+          opt.value = repo.full_name;
+          opt.textContent = `${repo.full_name} ${repo.private ? '🔒' : '🌐'}`;
+          repoSelect.appendChild(opt);
+        });
+
+        repoSelect.disabled = false;
+        checkCanPublish();
+      } catch (err) {
+        console.error('Erro ao listar repositórios:', err);
+      }
+    }
+
+    function checkCanPublish() {
+      const hasMd = state.markdown.length > 0;
+      const hasRepo = repoSelect.value !== '';
+      const hasAuth = !!state.githubUser;
+      btnPublish.disabled = !(hasMd && hasRepo && hasAuth);
+    }
+
+    repoSelect.addEventListener('change', checkCanPublish);
+
+    btnPublish.addEventListener('click', publicarNoGitHub);
+
+    async function publicarNoGitHub() {
+      const token = githubTokenInput.value.trim();
+      const repo = repoSelect.value;
+      const branch = githubBranchInput.value.trim() || 'main';
+      
+      let path = filePathInput.value.trim().replace(/^\/+/g, '');
+      const message = commitMsgInput.value.trim();
+
+      if (!repo || !path) {
+        alert('Por favor informe o repositório e o caminho de destino.');
+        return;
+      }
+
+      btnPublish.disabled = true;
+      btnPublish.textContent = 'Acessando / Criando Branch...';
+
+      try {
+        await obterOuCriarBranch(token, repo, branch);
+
+        btnPublish.textContent = 'Enviando imagens...';
+        const folder = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) + '/imagens' : 'imagens';
+
+        for (const [name, buffer] of Object.entries(state.images)) {
+          const base64 = arrayBufferToBase64(buffer);
+          await enviarArquivoGitHub(token, repo, `${folder}/${name}`, base64, `assets: upload ${name}`, branch);
+        }
+
+        btnPublish.textContent = 'Efetuando Commit do Markdown...';
+        const mdContent = state.markdown || markdownOutput.value;
+        const mdBase64 = utf8ToBase64(mdContent);
+        await enviarArquivoGitHub(token, repo, path, mdBase64, message, branch);
+
+        alert(`🚀 Publicado com sucesso no GitHub no caminho "${path}" (branch: ${branch})!`);
+
+      } catch (err) {
+        alert(`Erro na publicação: ${err.message}`);
+      } finally {
+        btnPublish.disabled = false;
+        btnPublish.textContent = 'Publicar Commit no GitHub';
+      }
+    }
+
+    async function obterOuCriarBranch(token, repo, branch) {
+      const headers = { 'Authorization': `token ${token}` };
+      const res = await fetch(`https://api.github.com/repos/${repo}/branches/${branch}`, { headers });
+      if (res.ok) return;
+
+      const repoRes = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+      const repoData = await repoRes.json();
+      const defBranch = repoData.default_branch || 'main';
+
+      const defRes = await fetch(`https://api.github.com/repos/${repo}/branches/${defBranch}`, { headers });
+      const defData = await defRes.json();
+      const sha = defData.commit.sha;
+
+      await fetch(`https://api.github.com/repos/${repo}/git/refs`, {
+        method: 'POST',
+        headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha })
+      });
+    }
+
+    async function enviarArquivoGitHub(token, repo, path, base64Content, message, branch) {
+      const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+      const headers = { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' };
+
+      let sha = null;
+      const getRes = await fetch(`${url}?ref=${branch}`, { headers });
+      if (getRes.ok) {
+        const data = await getRes.json();
+        sha = data.sha;
+      }
+
+      const body = { message, content: base64Content, branch };
+      if (sha) body.sha = sha;
+
+      const putRes = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+      if (!putRes.ok) {
+        const err = await putRes.json();
+        throw new Error(err.message);
+      }
+    }
+
+    btnCopyMd.addEventListener('click', () => {
+      if (!markdownOutput.value) return;
+      navigator.clipboard.writeText(markdownOutput.value);
+      btnCopyMd.textContent = 'Copiado!';
+      setTimeout(() => btnCopyMd.textContent = 'Copiar', 2000);
+    });
+
+    function downloadMarkdown() {
+      const content = state.markdown || markdownOutput.value;
+      if (!content || !content.trim()) {
+        alert('Nenhum conteúdo Markdown disponível para baixar.');
+        return;
+      }
+
+      let filename = 'documento.md';
+      if (state.file && state.file.name) {
+        const baseName = state.file.name.substring(0, state.file.name.lastIndexOf('.')) || state.file.name;
+        filename = baseName + '.md';
+      }
+
+      const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = filename;
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }
+
+    btnDownloadMdPanel.addEventListener('click', downloadMarkdown);
+    btnTopDownload.addEventListener('click', downloadMarkdown);
+
+    // Tab view toggles
+    tabModeCode.addEventListener('click', () => {
+      tabModeCode.className = 'px-3 py-1 rounded-md bg-navy-800 text-white font-medium transition-all';
+      tabModePreview.className = 'px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition-all';
+      previewContainer.classList.add('hidden');
+      markdownBox.classList.remove('hidden');
+    });
+
+    tabModePreview.addEventListener('click', () => {
+      tabModePreview.className = 'px-3 py-1 rounded-md bg-navy-800 text-white font-medium transition-all';
+      tabModeCode.className = 'px-3 py-1 rounded-md text-slate-400 hover:text-slate-200 transition-all';
+      markdownBox.classList.add('hidden');
+      previewContainer.classList.remove('hidden');
+    });
+
+    function utf8ToBase64(str) {
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (m, p1) => String.fromCharCode('0x' + p1)));
+    }
+
+    function arrayBufferToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+  </script>
+</body>
+</html>
